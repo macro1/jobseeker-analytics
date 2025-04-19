@@ -5,13 +5,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlmodel import Session, select, desc
 from googleapiclient.discovery import build
 from db.user_emails import UserEmails
+from db import processing_tasks as task_models
 from db.utils.user_email_utils import create_user_email
 from utils.auth_utils import AuthenticatedUser
 from utils.email_utils import get_email_ids, get_email
 from utils.llm_utils import process_email
 from utils.config_utils import get_settings
 from session.session_layer import validate_session
-from database import engine
+import database
 from google.oauth2.credentials import Credentials
 import json
 from start_date.storage import get_start_date_email_filter
@@ -29,7 +30,6 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 APP_URL = settings.APP_URL
 
-api_call_finished = False
 total_emails = 0
 processed_emails = 0
 
@@ -39,10 +39,15 @@ router = APIRouter()
 @router.get("/processing", response_class=HTMLResponse)
 async def processing(request: Request, user_id: str = Depends(validate_session)):
     logging.info("user_id:%s processing", user_id)
-    global api_call_finished, total_emails, processed_emails
+    global total_emails, processed_emails
     if not user_id:
         logger.info("user_id: not found, redirecting to login")
         return RedirectResponse("/logout", status_code=303)
+
+    with Session(database.engine) as session:
+        process_task_run = session.get(task_models.TaskRuns, user_id)
+        api_call_finished = process_task_run.status == task_models.FINISHED
+
     if api_call_finished:
         logger.info("user_id: %s processing complete", user_id)
         return JSONResponse(
@@ -66,7 +71,7 @@ async def processing(request: Request, user_id: str = Depends(validate_session))
 @router.get("/get-emails", response_model=List[UserEmails])
 @limiter.limit("5/minute")
 def query_emails(request: Request, user_id: str = Depends(validate_session)) -> None:
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         try:
             logger.info(f"Fetching emails for user_id: {user_id}")
 
@@ -87,7 +92,7 @@ async def delete_email(email_id: str, user_id: str = Depends(validate_session)):
     """
     Delete an email record by its ID for the authenticated user.
     """
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         try:
             # Query the email record to ensure it exists and belongs to the user
             email_record = session.exec(
@@ -150,17 +155,25 @@ async def start_fetch_emails(
 
 
 def fetch_emails_to_db(user: AuthenticatedUser, request: Request, last_updated: Optional[datetime] = None, user_id: str = Depends(validate_session)) -> None:
-    global api_call_finished, total_emails, processed_emails
+    global total_emails, processed_emails
     logger.info(f"Fetching emails to db for user_id: {user_id}")
 
-    api_call_finished = False  # this is helpful if the user applies for a new job and wants to rerun the analysis during the same session
+    with Session(database.engine) as session:
+        process_task_run = (
+            session.query(task_models.TaskRuns).filter_by(user_id=user_id).one_or_none()
+        )
+        if process_task_run is None:
+            process_task_run = task_models.TaskRuns(user_id=user_id)
+            session.add(process_task_run)
+        process_task_run.status = task_models.STARTED  # this is helpful if the user applies for a new job and wants to rerun the analysis during the same session
+        session.commit()
 
     start_date = request.session.get("start_date")
     start_date_query = get_start_date_email_filter(start_date)
     is_new_user = request.session.get("is_new_user")
 
     query = start_date_query
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         # check for users last updated email
         if last_updated:
             # this converts our date time to number of seconds 
@@ -175,6 +188,9 @@ def fetch_emails_to_db(user: AuthenticatedUser, request: Request, last_updated: 
                 logger.info(f"user_id:{user_id} Fetching emails after {last_updated.isoformat()}")
         else:
             logger.info(f"user_id:{user_id} Fetching all emails (no last_date maybe with start date)")
+            logger.info(
+                f"user_id:{user_id} Fetching all emails (no last_date maybe with start date)"
+            )
 
         service = build("gmail", "v1", credentials=user.creds)
 
@@ -186,7 +202,10 @@ def fetch_emails_to_db(user: AuthenticatedUser, request: Request, last_updated: 
 
         if not messages:
             logger.info(f"user_id:{user_id} No job application emails found.")
-            api_call_finished = True
+            with Session(database.engine) as session:
+                process_task_run = session.get(task_models.TaskRuns, user_id)
+                process_task_run.status = task_models.FINISHED
+                session.commit()
             return
 
         logger.info(f"user_id:{user.user_id} Found {len(messages)} emails.")
@@ -248,5 +267,8 @@ def fetch_emails_to_db(user: AuthenticatedUser, request: Request, last_updated: 
                 f"Added {len(email_records)} email records for user {user_id}"
             )
 
-        api_call_finished = True
+        with Session(database.engine) as session:
+            process_task_run = session.get(task_models.TaskRuns, user_id)
+            process_task_run.status = task_models.FINISHED
+            session.commit()
         logger.info(f"user_id:{user_id} Email fetching complete.")
