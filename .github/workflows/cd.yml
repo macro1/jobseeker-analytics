@@ -27,3 +27,4 @@ jobs:
         google-credentials-file-content: ${{ secrets.GOOGLE_CREDENTIALS_FILE_CONTENT }}
         ls-database-name: ${{ secrets.LS_DATABASE_NAME }}
         redirect-uri: ${{ secrets.REDIRECT_URI }}
+        cookie-secret: ${{ secrets.COOKIE_SECRET }}

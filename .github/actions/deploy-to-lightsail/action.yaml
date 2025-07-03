@@ -20,6 +20,9 @@ inputs:
   redirect-uri:
     description: Login redirect URI associated with the Google App
     required: true
+  cookie-secret:
+    description: Cookie secret
+    required: true
 
 runs:
   using: composite
@@ -92,6 +95,7 @@ runs:
       PUBLIC_PORT: 80
       DATABASE_URL: ${{ steps.get_db_info.outputs.database_url }}
       REDIRECT_URI: ${{ inputs.redirect-uri }}
+      COOKIE_SECRET: ${{ inputs.cookie-secret }}
     shell: bash
     run: |
 
@@ -105,7 +109,7 @@ runs:
             "environment": {
               "REDIRECT_URI": "${REDIRECT_URI}",
               "GOOGLE_API_KEY": "...",
-              "COOKIE_SECRET": "...",
+              "COOKIE_SECRET": "${COOKIE_SECRET}",
               "APP_URL": "http://localhost:3000",
               "ENV": "staging",
               "DATABASE_URL": "${DATABASE_URL}"
