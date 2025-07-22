@@ -42,6 +42,9 @@ interface JobApplicationsDashboardProps {
 	onRemoveItem: (id: string) => void;
 	initialSortKey?: string;
 	responseRate?: React.ReactNode;
+	sankeyChart?: React.ReactNode;
+	searchTerm?: string;
+	onSearchChange?: (term: string) => void;
 	onNextPage: () => void;
 	onPrevPage: () => void;
 	currentPage: number;
@@ -93,9 +96,13 @@ export default function JobApplicationsDashboard({
 	downloading,
 	onDownloadCsv,
 	onDownloadSankey,
-	onRemoveItem, // Accept the callback
+	onRemoveItem,
 	initialSortKey = "Date (Newest)",
-	responseRate
+	responseRate,
+	sankeyChart,
+	searchTerm = "",
+	onSearchChange,
+	...props
 }: JobApplicationsDashboardProps) {
 	const [sortedData, setSortedData] = useState<Application[]>([]);
 	const [selectedKeys, setSelectedKeys] = useState(new Set([getInitialSortKey(initialSortKey)]));
@@ -283,57 +290,63 @@ export default function JobApplicationsDashboard({
 			</Modal>
 			<h1 className="text-2xl font-bold mt-0">{title}</h1>
 			{responseRate}
-			<div className="flex flex-wrap items-center justify-end gap-4 mb-4">
-				<Dropdown>
-					<DropdownTrigger>
-						<Button
-							className="pl-3"
-							color="primary"
-							data-testid="Sort By"
-							isDisabled={!data || data.length === 0}
-							startContent={<SortIcon />}
-							variant="bordered"
+			{sankeyChart && <div className="mb-6">{sankeyChart}</div>}
+			<div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+				{/* Search Input */}
+				<div className="flex-1 max-w-md">
+					<input
+						className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+						placeholder="Search by company name..."
+						type="text"
+						value={searchTerm}
+						onChange={(e) => onSearchChange?.(e.target.value)}
+					/>
+				</div>
+
+				{/* Sort and Download Controls */}
+				<div className="flex items-center gap-4">
+					<Dropdown>
+						<DropdownTrigger>
+							<Button
+								className="pl-3"
+								color="primary"
+								data-testid="Sort By"
+								isDisabled={!data || data.length === 0}
+								startContent={<SortIcon />}
+								variant="bordered"
+							>
+								{selectedValue}
+							</Button>
+						</DropdownTrigger>
+						<DropdownMenu
+							disallowEmptySelection
+							aria-label="Single selection example"
+							selectedKeys={selectedKeys}
+							selectionMode="single"
+							variant="flat"
+							onSelectionChange={(keys) => handleSortChange(keys as Set<string>)}
 						>
-							{selectedValue}
-						</Button>
-					</DropdownTrigger>
-					<DropdownMenu
-						disallowEmptySelection
-						aria-label="Single selection example"
-						selectedKeys={selectedKeys}
-						selectionMode="single"
-						variant="flat"
-						onSelectionChange={(keys) => handleSortChange(keys as Set<string>)}
+							<DropdownSection title="Sort By">
+								<DropdownItem key="Date (Newest)">Date Received (Newest First)</DropdownItem>
+								<DropdownItem key="Date (Oldest)">Date Received (Oldest First)</DropdownItem>
+								<DropdownItem key="Company">Company (A-Z)</DropdownItem>
+								<DropdownItem key="Job Title">Job Title (A-Z)</DropdownItem>
+								<DropdownItem key="Status">Application Status</DropdownItem>
+							</DropdownSection>
+						</DropdownMenu>
+					</Dropdown>
+
+					<Button
+						className="w-full sm:w-auto text-white"
+						color="success"
+						isDisabled={!data || data.length === 0}
+						isLoading={downloading}
+						startContent={<DownloadIcon />}
+						onPress={onDownloadCsv}
 					>
-						<DropdownSection title="Sort By">
-							<DropdownItem key="Date (Newest)">Date Received (Newest First)</DropdownItem>
-							<DropdownItem key="Date (Oldest)">Date Received (Oldest First)</DropdownItem>
-							<DropdownItem key="Company">Company (A-Z)</DropdownItem>
-							<DropdownItem key="Job Title">Job Title (A-Z)</DropdownItem>
-							<DropdownItem key="Status">Application Status</DropdownItem>
-						</DropdownSection>
-					</DropdownMenu>
-				</Dropdown>
-				<Button
-					className="w-full sm:w-auto text-white"
-					color="primary"
-					isDisabled={!data || data.length === 0}
-					isLoading={downloading}
-					startContent={<DownloadIcon />}
-					onPress={onDownloadSankey}
-				>
-					Download Sankey Diagram
-				</Button>
-				<Button
-					className="w-full sm:w-auto text-white"
-					color="success"
-					isDisabled={!data || data.length === 0}
-					isLoading={downloading}
-					startContent={<DownloadIcon />}
-					onPress={onDownloadCsv}
-				>
-					Download CSV
-				</Button>
+						Download CSV
+					</Button>
+				</div>
 			</div>
 
 			{loading ? (

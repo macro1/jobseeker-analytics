@@ -5,6 +5,7 @@ from google.ai.generativelanguage_v1beta2 import GenerateTextResponse
 import logging
 
 from utils.config_utils import get_settings
+from utils.task_utils import processed_emails_exceeds_rate_limit
 
 settings = get_settings()
 
@@ -20,7 +21,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-def process_email(email_text):
+def process_email(email_text: str, user_id: str):
     prompt = f"""
         First, extract the job application status from the following email using the labels below. 
         If the status is 'False positive', only return the status as 'False positive' and do not extract company name or job title. 
@@ -99,7 +100,6 @@ def process_email(email_text):
         Remove backticks. Only use double quotes. Enclose key and value pairs in a single pair of curly braces.
         Email: {email_text}
     """
-
     retries = 3  # Max retries
     delay = 60  # Initial delay
     for attempt in range(retries):
@@ -128,11 +128,15 @@ def process_email(email_text):
                 logger.error("Empty response received from the model.")
                 return None
         except Exception as e:
-            if "429" in str(e):
+            daily_batch_exceeded = processed_emails_exceeds_rate_limit(user_id)
+            if "429" in str(e) and not daily_batch_exceeded:
                 logger.warning(
                     f"Rate limit hit. Retrying in {delay} seconds (attempt {attempt + 1})."
                 )
                 time.sleep(delay)
+            elif "429" in str(e) and daily_batch_exceeded:
+                logger.error("Daily rate limit exceeded. Not retrying.")
+                return None
             else:
                 logger.error(f"process_email exception: {e}")
                 return None

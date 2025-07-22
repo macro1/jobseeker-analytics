@@ -1,54 +1,79 @@
-from datetime import datetime, timedelta
-from unittest import mock
-
 import pytest
 from fastapi.testclient import TestClient
+from datetime import datetime
 
 from db.users import Users
 import database
 import main
+from session.session_layer import validate_session
+from db.processing_tasks import STARTED, FINISHED, TaskRuns
 
 
 @pytest.fixture
-def client(db_session):
-    main.app.dependency_overrides[database.request_session] = lambda: db_session
-    test_client = TestClient(main.app)
+def task_factory(db_session, logged_in_user):
+    def _create_task(status=STARTED, processed_emails=0):
+        task = TaskRuns(
+            user=logged_in_user, status=status, processed_emails=processed_emails
+        )
+        db_session.add(task)
+        db_session.commit()
+        return task
 
-    return test_client
+    return _create_task
 
 
 @pytest.fixture
-def logged_in_user(db_session, client):
-    # create user
-    user = Users(
-        user_id="123",
-        user_email="user@example.com",
-        start_date=datetime(2000, 1, 1),
-    )
-    db_session.add(user)
-    db_session.flush()
-
-    # log in
-    mock_credentials = mock.Mock(
-        **{
-            "expiry": datetime.utcnow() + timedelta(seconds=10),
-            "token": "fake access token",
-            "to_json.return_value": {"foo": "bar"},
-        }
-    )
-    mock_decoded_token = {"sub": user.user_id, "email": user.user_email}
-    with (
-        mock.patch(
-            "routes.auth_routes.Flow",
-            **{"from_client_secrets_file.return_value.credentials": mock_credentials},
-        ),
-        mock.patch(
-            "utils.auth_utils.id_token",
-            **{"verify_oauth2_token.return_value": mock_decoded_token},
-        ),
+def user_factory(db_session):
+    def _create_user(
+        user_id="123", user_email="user@example.com", start_date=datetime(2000, 1, 1)
     ):
-        auth_resp = client.get("/login", params={"code": "abc"}, follow_redirects=False)
-        assert auth_resp.status_code == 303
-        assert auth_resp.headers["Location"] == "http://localhost:3000/dashboard"
+        user = Users(user_id=user_id, user_email=user_email, start_date=start_date)
+        db_session.add(user)
+        db_session.commit()
+        return user
 
-    return user
+    return _create_user
+
+
+@pytest.fixture
+def logged_in_user(user_factory):
+    return user_factory()
+
+
+@pytest.fixture
+def started_task(task_factory):
+    return task_factory(status=STARTED)
+
+
+@pytest.fixture
+def finished_task(task_factory):
+    return task_factory(status=FINISHED)
+
+
+@pytest.fixture
+def rate_limited_task(task_factory):
+    return task_factory(status=STARTED, processed_emails=300)
+
+
+@pytest.fixture
+def client_factory(db_session):
+    def _make_client(user=None):
+        main.app.dependency_overrides[database.request_session] = lambda: db_session
+        if user and user.user_id:
+            main.app.dependency_overrides[validate_session] = lambda: user.user_id
+        else:
+            # Simulate not logged in: validate_session returns empty string
+            main.app.dependency_overrides[validate_session] = lambda: ""
+        return TestClient(main.app)
+
+    return _make_client
+
+
+@pytest.fixture
+def logged_in_client(client_factory, logged_in_user):
+    return client_factory(user=logged_in_user)
+
+
+@pytest.fixture
+def incognito_client(client_factory):
+    return client_factory(user=None)

@@ -16,9 +16,10 @@ def get_session():
 
 def request_session():
     session = get_session()
-
-    with session.begin():
+    try:
         yield session
+    finally:
+        session.close()
 
 
 DBSession = Annotated[Session, fastapi.Depends(request_session)]

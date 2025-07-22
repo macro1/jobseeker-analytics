@@ -33,10 +33,12 @@ const ProcessingPage = () => {
 					});
 
 					const result = await res.json();
-					if (result.total_emails === 0) {
+					const total = Number(result.total_emails);
+					const processed = Number(result.processed_emails);
+					if (!total || isNaN(total)) {
 						setProgress(100);
 					} else {
-						setProgress(100 * (result.processed_emails / result.total_emails));
+						setProgress(100 * (processed / total));
 					}
 					if (result.message === "Processing complete") {
 						clearInterval(interval);

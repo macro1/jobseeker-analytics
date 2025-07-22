@@ -110,13 +110,9 @@ def calculate_response_rate(
     # Create unique application IDs based on company_name only (ignore job_title for now)
     applications = {}
     
-    logger.info(f"DEBUG: Processing {len(user_emails)} total emails")
-    
     for email in user_emails:
         if email.company_name:
             app_id = email.company_name  # Use only company name as unique identifier
-            
-            logger.info(f"DEBUG: Email from {email.company_name} - {email.job_title} - Status: {email.application_status}")
             
             if app_id not in applications:
                 applications[app_id] = {
@@ -133,8 +129,6 @@ def calculate_response_rate(
                     applications[app_id]["statuses"].add(status)
 
     logger.info(f"DEBUG: All applications before filtering: {len(applications)}")
-    for app_id, app_data in applications.items():
-        logger.info(f"DEBUG:   {app_id} - Statuses: {list(app_data['statuses'])}")
 
     # Filter out applications that only have unknown statuses (no valid statuses)
     valid_applications = {}
@@ -150,26 +144,14 @@ def calculate_response_rate(
     # Count applications that received a response (not just application confirmation or rejection)
     responses_received = 0
     
-    # Debug logging
-    logger.info(f"DEBUG: Total valid applications: {total_applications}")
-    
     for app_id, app_data in valid_applications.items():
         statuses = app_data["statuses"]
-        company = app_data["company"]
-        job_title = app_data["job_title"]
         
         # Check if this application received any response beyond initial confirmation/rejection
         has_response = any(status not in ["application confirmation", "rejection"] for status in statuses)
         
-        logger.info(f"DEBUG: Application {app_id} ({company} - {job_title})")
-        logger.info(f"DEBUG:   Statuses: {list(statuses)}")
-        logger.info(f"DEBUG:   Has response: {has_response}")
-        
         if has_response:
             responses_received += 1
-
-    logger.info(f"DEBUG: Total responses received: {responses_received}")
-    logger.info(f"DEBUG: Response rate calculation: {responses_received}/{total_applications} = {(responses_received/total_applications)*100}%")
 
     response_rate_percent = (responses_received / total_applications) * 100
     return {"value": round(response_rate_percent, 1)}

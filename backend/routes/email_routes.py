@@ -17,7 +17,7 @@ from google.oauth2.credentials import Credentials
 import json
 from start_date.storage import get_start_date_email_filter
 from constants import QUERY_APPLIED_EMAIL_FILTER
-from datetime import datetime, timedelta
+from datetime import datetime
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 APP_URL = settings.APP_URL
 
-SECONDS_BETWEEN_FETCHING_EMAILS = 1 * 60 * 60  # 1 hour
 
 # FastAPI router for email routes
 router = APIRouter()
@@ -44,7 +43,7 @@ async def processing(request: Request, db_session: database.DBSession, user_id: 
 
     process_task_run: task_models.TaskRuns = db_session.get(task_models.TaskRuns, user_id)
 
-    if process_task_run is None:
+    if not process_task_run:
         raise HTTPException(
             status_code=404, detail="Processing has not started."
         )
@@ -164,19 +163,17 @@ def fetch_emails_to_db(user: AuthenticatedUser, request: Request, last_updated: 
 
     with Session(database.engine) as db_session:
         # we track starting and finishing fetching of emails for each user
-        process_task_run = (
-            db_session.query(task_models.TaskRuns).filter_by(user_id=user_id).one_or_none()
-        )
+        process_task_run = db_session.exec(
+            select(task_models.TaskRuns).filter_by(user_id=user_id)
+        ).one_or_none()
         if process_task_run is None:
             # if this is the first time running the task for the user, create a record
             process_task_run = task_models.TaskRuns(user_id=user_id)
             db_session.add(process_task_run)
-        elif datetime.now() - process_task_run.updated < timedelta(
-            seconds=SECONDS_BETWEEN_FETCHING_EMAILS
-        ):
+        elif process_task_run.processed_emails >= settings.batch_size_by_env:
             # limit how frequently emails can be fetched by a specific user
             logger.warning(
-                "Less than an hour since last fetch of emails for user",
+                "Already fetched the maximum number (%s) of emails for this user for today", settings.batch_size_by_env,
                 extra={"user_id": user_id},
             )
             return
@@ -247,7 +244,7 @@ def fetch_emails_to_db(user: AuthenticatedUser, request: Request, last_updated: 
 
             if msg:
                 try:
-                    result = process_email(msg["text_content"])
+                    result = process_email(msg["text_content"], user_id)
                     # if values are empty strings or null, set them to "unknown"
                     for key in result.keys():
                         if not result[key]:

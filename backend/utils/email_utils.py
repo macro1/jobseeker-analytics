@@ -3,14 +3,15 @@ import email
 import logging
 import re
 from typing import Dict, Any
-
 from bs4 import BeautifulSoup
 from email_validator import validate_email, EmailNotValidError
 
 from constants import GENERIC_ATS_DOMAINS
+from utils.config_utils import get_settings
 
 logger = logging.getLogger(__name__)
 
+settings = get_settings()
 
 def clean_whitespace(text: str) -> str:
     """
@@ -167,17 +168,19 @@ def get_email_ids(query: tuple = None, gmail_instance=None):
     page_token = None
 
     while True:
+        
         response = (
-            gmail_instance.users()
-            .messages()
-            .list(
-                userId="me",
-                q=query,
-                includeSpamTrash=True,
-                pageToken=page_token,
+                gmail_instance.users()
+                .messages()
+                .list(
+                    userId="me",
+                    q=query,
+                    includeSpamTrash=True,
+                    pageToken=page_token,
+                    maxResults=settings.batch_size_by_env,
+                )
+                .execute()
             )
-            .execute()
-        )
 
         if "messages" in response:
             email_ids.extend(response["messages"])

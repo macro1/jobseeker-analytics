@@ -1,16 +1,15 @@
 [![Run python unit tests](https://github.com/macro1/jobseeker-analytics/actions/workflows/pytest.yml/badge.svg)](https://github.com/macro1/jobseeker-analytics/actions/workflows/pytest.yml)
 
-## **About Just a Job App**
+## **About Just A Job App (JAJA)**
 
-Built by jobseekers, for jobseekers. Free forever.
+**JAJA tracks your job applications automatically, no spreadsheet required.** 
 
-Tired of abandoned spreadsheets and forgotten Notion tables?
+Isn't tracking companies you've applied to exhausting? The emotional toll burned me out faster than the job hunt itself.
 
-Just a Job App tracks your job applications — automatically, straight from your inbox.
+That's why I built JAJA—to automate the tedious work of tracking applications.
 
-No manual tracking. No extra tabs. Just a simpler job search.
+<img width="2800" height="1800" alt="sankey_diagram_2025-07-18" src="https://github.com/user-attachments/assets/085ced99-2913-4c85-9422-2d5f49363d70" />
 
-![sneakpeek](https://github.com/user-attachments/assets/ccfac1bd-ce57-4f62-894c-c55682ff2fb4)
 
 🎥 [Watch a demo](https://youtube.com/shorts/YT7qzTh2Q7A?feature=share)
 
